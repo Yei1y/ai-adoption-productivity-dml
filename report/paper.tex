@@ -1,0 +1,331 @@
+\documentclass[UTF8,11pt,a4paper]{ctexart}
+
+% ---------- 页面设置 ----------
+\usepackage[top=2.2cm, bottom=2.2cm, left=2.2cm, right=2.2cm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs,multirow,array}
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black]{hyperref}
+\usepackage{caption}
+\usepackage{setspace}
+\usepackage{indentfirst}
+\usepackage{abstract}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+    language=Python,
+    basicstyle=\small\ttfamily,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    commentstyle=\color{teal},
+    keywordstyle=\color{blue},
+    stringstyle=\color{red!80!black},
+    extendedchars=true,
+    numbersep=5pt,
+    xleftmargin=15pt,
+    framexleftmargin=15pt,
+}
+
+% 行距与段落
+\setstretch{1.0}
+\setlength{\parskip}{0.3em}
+
+% 节标题格式
+\ctexset{section/format={\large\bfseries}}
+\ctexset{subsection/format={\normalsize\bfseries}}
+
+% 图/表编号
+\captionsetup{labelsep=space, font=small}
+
+\begin{document}
+
+% ============================================================
+% 标题
+% ============================================================
+\title{\vspace{-2em}\textbf{AI 技术采纳对企业劳动生产率的因果效应}\\\textbf{——基于双重机器学习的实证分析}}
+\author{}
+\date{}
+\maketitle
+\vspace{-3em}
+
+% ============================================================
+% 摘要
+% ============================================================
+\begin{abstract}
+\noindent 人工智能技术的快速发展引发了关于其对企业生产率影响的广泛讨论。本文基于 Global AI Adoption \& Workforce Impact 数据集（150{,}000 家企业观测，2023--2026 年），采用双重机器学习（Double/Debiased Machine Learning, DML）方法，在部分线性模型框架下估计 AI 技术采纳对企业劳动生产率的因果效应。通过 Neyman 正交评分与交叉拟合技术，DML 允许在控制高维协变量的同时实现稳健的推断。实证结果表明，在控制行业、规模、自动化率、创新能力等企业特征后，AI 采纳对劳动生产率的因果效应为 0.006，在统计上不显著（$p = 0.342$）。该结论在随机森林、LASSO、XGBoost 三种机器学习方法以及不同的交叉拟合折数（$K = 2,5,10$）下均保持稳健。进一步分析显示，仅将全面采纳（full adoption）定义为处理组时效应显著为正（$\hat\theta = 0.056$, $p = 0.030$），但该结果需谨慎解读。研究表明，AI 采纳与企业生产率之间的正向关联很大程度上可由企业特征差异所解释，而非直接的因果效应。
+\end{abstract}
+
+% ============================================================
+% 1. 引言
+% ============================================================
+\section{引言}\label{sec:intro}
+
+人工智能（AI）作为一项通用技术，正深刻重塑全球产业格局。企业对 AI 技术的采纳是否切实提升了生产率，是经济学界和实务界共同关注的焦点问题。现有研究对此尚未形成一致结论：一方面，部分研究发现 AI 显著提升了企业绩效~\cite{acemoglu2018race}；另一方面，AI 的生产率效应可能存在滞后性，且在不同行业和企业间呈现显著异质性~\cite{bresnahan2002information}。
+
+从计量经济学角度看，识别 AI 采纳对生产率的因果效应面临两重挑战：一是\textbf{混淆因素}——采纳 AI 的企业往往在规模、创新能力、数字化水平等方面与未采纳企业存在系统性差异，这些差异同时影响采纳决策和生产率；二是\textbf{高维控制}——潜在的混淆因素数量多、形式复杂（包括非线性关系和高阶交互效应），传统的参数回归方法难以灵活控制。
+
+双重机器学习（Double/Debiased Machine Learning, DML）由 Chernozhukov 等~\cite{chernozhukov2018double} 提出，为解决上述挑战提供了有效框架。DML 在部分线性模型下利用机器学习方法灵活估计高维非线性 nuisance 函数，并通过 Neyman 正交评分和交叉拟合保证因果参数的 $\sqrt{N}$-一致估计和渐近正态推断。
+
+本文基于 Kaggle 平台 Global AI Adoption \& Workforce Impact 数据集（150{,}000 条企业观测），采用 DML 方法估计 AI 技术采纳对企业劳动生产率的因果效应。研究结果表明：（1）在控制企业特征后，AI 采纳（部分采纳或全面采纳）对劳动生产率的因果效应不显著（$\hat\theta = 0.006$, $p = 0.342$）；（2）该结论在多种设定下保持稳健；（3）仅全面采纳 AI 的企业表现出显著的生产率提升（$\hat\theta = 0.056$, $p = 0.030$），但处理组仅占样本的 1.1\%。本文的结构如下：第~\ref{sec:data} 节介绍数据来源与描述性统计；第~\ref{sec:model} 节建立部分线性模型并阐述 DML 估计方法；第~\ref{sec:results} 节报告实证结果与稳健性检验；第~\ref{sec:conclusion} 节总结全文。
+
+% ============================================================
+% 2. 数据
+% ============================================================
+\section{数据}\label{sec:data}
+
+\subsection{数据来源}
+
+本文使用的数据来自 Kaggle 平台发布的 Global AI Adoption \& Workforce Impact Dataset\footnote{https://www.kaggle.com/datasets/mohankrishnathalla/global-ai-adoption-and-workforce-impact-dataset}。该数据集包含 2023 年至 2026 年全球 30 个国家 9 个行业共 150{,}000 条企业级观测，记录了企业的 AI 采纳阶段、财务状况、劳动力结构、运营特征以及治理实践等多维度信息，无缺失值。
+
+\subsection{变量设计与选择理由}
+
+\textbf{处理变量 $D$：AI 采纳程度。}数据中的 AI 采纳阶段包含四个类别：无采纳（none, 3.5\%）、试验阶段（pilot, 42.9\%）、部分采纳（partial, 52.5\%）和全面采纳（full, 1.1\%）。本文将部分采纳和全面采纳定义为高采纳组（$D = 1$），其余为低采纳组（$D = 0$），得到 53.7\% 的处理组与 46.3\% 的对照组，分组均衡。
+
+\textbf{结果变量 $Y$：劳动生产率。}参照 Syverson~\cite{syverson2011determinants} 的标准做法，以人均营收的对数衡量：$Y = \log(\text{Annual Revenue} / \text{Employees})$。
+
+\textbf{协变量 $X$：企业特征。}为控制混淆因素，选取以下维度的协变量：基本特征（行业、国家、地区、规模、年龄）、时间固定效应（年份、季度）、运营特征（自动化率、远程办公比例）、治理与创新（监管合规评分、数据隐私水平、AI 伦理委员会、风险管理评分、创新评分、员工满意度）。通过 one-hot 编码后协变量总维度为 64。
+
+\subsection{描述性统计}
+
+\begin{table}[H]
+\centering
+\caption{主要变量描述性统计}
+\label{tab:descriptive}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccc}
+\toprule
+变量 & 均值 & 标准差 & 最小值 & 最大值 \\
+\midrule
+劳动生产率（对数） & $-0.747$ & 0.935 & $-4.428$ & 2.247 \\
+AI 高采纳（$D=1$） & 0.537 & 0.499 & 0 & 1 \\
+企业年龄 & 18.507 & 9.539 & 1.000 & 36.000 \\
+自动化率（\%） & 19.762 & 9.223 & 0.000 & 59.630 \\
+创新评分 & 55.200 & 8.593 & 40.000 & 97.000 \\
+员工满意度 & 5.601 & 0.815 & 2.100 & 9.200 \\
+监管合规评分 & 70.398 & 9.406 & 40.000 & 100.000 \\
+AI 风险管理评分 & 59.566 & 8.851 & 40.000 & 98.000 \\
+远程办公比例（\%） & 43.191 & 14.363 & 0.000 & 100.000 \\
+员工数 & 2342.377 & 4754.425 & 10.000 & 19970.000 \\
+营收（百万美元） & 1180.346 & 2391.471 & 1.010 & 9996.730 \\
+\bottomrule
+\multicolumn{5}{l}{\footnotesize 注：样本量 $N = 150{,}000$，数据不含缺失值。}
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.47\textwidth]{../output/figures/fig1_ai_adoption_by_industry.pdf}
+\includegraphics[width=0.47\textwidth]{../output/figures/fig2_productivity_by_adoption.pdf}
+\caption{左：各行业 AI 采纳率（展示行业异质性）；右：不同采纳状态下的劳动生产率分布对比}
+\label{fig:eda}
+\end{figure}
+
+表~\ref{tab:descriptive} 报告了主要变量的描述性统计。样本覆盖初创企业（37.8\%）、中小企业（42.6\%）和大型企业（19.6\%），行业涵盖科技（14.1\%）、金融（13.4\%）、医疗（12.4\%）等九个领域。图~\ref{fig:eda} 展示了数据的基本特征：左图显示行业间 AI 采纳率差异较大（约 40\%--70\%），表明行业是重要混淆因素；右图显示高采纳组与低采纳组的劳动生产率分布十分接近，原始差异很小（均值差仅为 0.009），这为后续因果分析提供了初步线索。
+
+% ============================================================
+% 3. 模型建立
+% ============================================================
+\section{模型建立}\label{sec:model}
+
+\subsection{部分线性模型}
+
+本文采用部分线性模型（Partial Linear Model）刻画 AI 采纳与劳动生产率之间的关系：
+\begin{align}
+Y_i &= \theta_0 D_i + g_0(X_i) + \varepsilon_i, \quad \mathbb{E}[\varepsilon_i \mid X_i, D_i] = 0, \label{eq:plm_y} \\
+D_i &= m_0(X_i) + \nu_i, \quad \mathbb{E}[\nu_i \mid X_i] = 0. \label{eq:plm_d}
+\end{align}
+其中 $Y_i$ 为劳动生产率的对数，$D_i$ 为 AI 采纳的二元处理变量，$X_i$ 为高维协变量向量。参数 $\theta_0$ 是核心待估参数——AI 采纳的平均处理效应（ATE）。函数 $g_0(\cdot)$ 和 $m_0(\cdot)$ 为未知的 nuisance 函数，由机器学习方法灵活估计。该模型将因果参数 $\theta_0$ 与 nuisance 函数分离，为 DML 方法的应用提供了基础框架。
+
+\subsection{DML 估计量}
+
+DML 方法基于 Neyman 正交评分函数构造估计量。对部分线性模型，评分函数为：
+\begin{equation}\label{eq:score}
+\psi(W; \theta, \eta) = \bigl(Y - \ell(X) - \theta \bigl(D - m(X)\bigr)\bigr) \bigl(D - m(X)\bigr),
+\end{equation}
+其中 $\ell(X) = \mathbb{E}[Y \mid X]$，$m(X) = \mathbb{E}[D \mid X]$。该评分满足 Neyman 正交性：$\partial \mathbb{E}[\psi(W; \theta_0, \eta_0)] / \partial \eta = 0$，即 nuisance 参数的估计误差对 $\theta_0$ 的影响是二阶小量。这一性质保证了即使使用灵活的机器学习方法估计 $\ell$ 和 $m$，$\theta$ 的估计仍能达到 $\sqrt{N}$-收敛率。
+
+给定 nuisance 函数的估计 $\hat\ell$ 和 $\hat m$，DML 估计量求解 $\frac{1}{N}\sum_i \psi(W_i; \hat\theta, \hat\eta) = 0$，得到：
+\begin{equation}\label{eq:dml_estimator}
+\hat\theta = \frac{\sum_{i=1}^N \tilde D_i \tilde Y_i}{\sum_{i=1}^N \tilde D_i^2},
+\end{equation}
+其中 $\tilde Y_i = Y_i - \hat\ell(X_i)$，$\tilde D_i = D_i - \hat m(X_i)$ 为残差。直觉上，DML 先通过机器学习"剔除"协变量 $X$ 对 $Y$ 和 $D$ 的影响，再对剩余的变异进行 OLS 回归。
+
+\subsection{交叉拟合}
+
+若用全样本估计 nuisance 函数再在相同数据上估计 $\theta$，会因过拟合产生偏差。交叉拟合（cross-fitting）技术用于避免这一问题，具体流程如下：
+
+\begin{enumerate}[leftmargin=*,nosep]
+\item 将样本随机等分为 $K$ 折（本文取 $K = 5$）。
+\item 对每折 $k = 1,\dots,K$：
+  \begin{enumerate}[nosep]
+    \item 在除第 $k$ 折外的所有样本上训练 $\hat\ell^{(-k)}$ 和 $\hat m^{(-k)}$。
+    \item 在第 $k$ 折上计算残差 $\tilde Y_i = Y_i - \hat\ell^{(-k)}(X_i)$，$\tilde D_i = D_i - \hat m^{(-k)}(X_i)$。
+  \end{enumerate}
+\item 合并所有残差，代入式~\eqref{eq:dml_estimator} 得 $\hat\theta$。
+\item 采用 Eicker--Huber--White 稳健标准误进行推断：
+  \begin{equation*}
+    \widehat{\mathrm{Var}}(\hat\theta) = \frac{\sum_i \tilde D_i^2 \hat\varepsilon_i^2}{\bigl(\sum_i \tilde D_i^2\bigr)^2}, \quad
+    \hat\varepsilon_i = \tilde Y_i - \hat\theta \tilde D_i.
+  \end{equation*}
+\end{enumerate}
+
+\subsection{机器学习方法}
+
+基线设定使用\textbf{随机森林}（RF, $n_{\text{estimators}}=100$, $\max_{\text{depth}}=10$, $\min_{\text{samples leaf}}=10$），能自动捕捉非线性关系和交互效应。稳健性检验中进一步使用\textbf{LASSO}（交叉验证选择 $\lambda$）和\textbf{XGBoost}（$n_{\text{estimators}}=100$, $\max_{\text{depth}}=4$, 学习率 0.1）估计 nuisance 函数。
+
+% ============================================================
+% 4. 实证结果
+% ============================================================
+\section{实证结果}\label{sec:results}
+
+\subsection{基准结果}
+
+\begin{table}[H]
+\centering
+\caption{基准 DML 估计结果}
+\label{tab:baseline}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+方法 & ATE & 标准误 & 95\% 置信区间 & $p$ 值 & 样本量 \\
+\midrule
+DML（RF, $K=5$） & 0.0059 & 0.0062 & $[-0.0063,\;0.0180]$ & 0.342 & 150{,}000 \\
+\midrule
+原始均值差异 & 0.0088 & --- & --- & --- & 150{,}000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表~\ref{tab:baseline} 报告了基准 DML 估计结果。在控制行业、规模、自动化率、创新能力等企业特征后，AI 采纳的 ATE 为 0.0059（标准误 0.0062，$p = 0.342$），统计上不显著。点估计对应的劳动生产率为约 0.6\% 的提升，经济意义有限。作为参照，高采纳组与低采纳组的原始均值差异为 0.0088，与 DML 估计值在量级上接近——表明在控制可观测特征后，因果效应估计与原始差异方向一致但估计精度不足以拒绝零假设。
+
+\textbf{讨论：}一个可能解释是数据集覆盖的企业多处于 AI 采纳的早期阶段（全面采纳仅占 1.1\%）。按 Nelson~\&~Phelps（1966）的技术扩散理论，企业需要一定的学习和调整时间才能将新技术转化为生产率增长。若数据采集时大部分企业刚进入采纳阶段，因果效应可能尚未充分显现。
+
+\subsection{稳健性检验}
+
+\begin{table}[H]
+\centering
+\caption{稳健性检验结果}
+\label{tab:robustness}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccl}
+\toprule
+设定 & ATE & 标准误 & 95\% CI & $p$ 值 \\
+\midrule
+\textbf{（1）更换 ML 方法} & & & & \\
+\quad LASSO（CV） & 0.0004 & 0.0064 & $[-0.0121,\;0.0129]$ & 0.948 \\
+\quad XGBoost & 0.0042 & 0.0065 & $[-0.0085,\;0.0168]$ & 0.519 \\
+\midrule
+\textbf{（2）改变折数} & & & & \\
+\quad $K = 2$ & 0.0058 & 0.0063 & $[-0.0065,\;0.0181]$ & 0.354 \\
+\quad $K = 10$ & 0.0051 & 0.0062 & $[-0.0070,\;0.0172]$ & 0.407 \\
+\midrule
+\textbf{（3）严格处理定义} & & & & \\
+\quad 仅 full = 1 & 0.0557 & 0.0256 & $[0.0055,\;0.1060]$ & 0.030 \\
+\midrule
+\textbf{（4）替换结果变量} & & & & \\
+\quad 生产率变化（\%） & 2.698 & 0.029 & $[2.640,\;2.756]$ & $<0.001$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表~\ref{tab:robustness} 汇总了四项稳健性检验的结果：
+
+\textbf{（1）更换 ML 方法。}LASSO 和 XGBoost 的 ATE 分别为 0.0004（$p = 0.948$）和 0.0042（$p = 0.519$），与基线高度一致。三种差异巨大的机器学习方法得到一致结论，显著增强了结果的可信度。
+
+\textbf{（2）改变交叉拟合折数。}$K = 2$ 和 $K = 10$ 的 ATE 分别为 0.0058 和 0.0051，几乎无异于基线。表明 DML 估计对样本分割方式不敏感。
+
+\textbf{（3）严格处理定义。}仅将全面采纳定义为处理组时，ATE 升至 0.0557（$p = 0.030$），在 5\% 水平上显著。这一结果需谨慎解读：一方面可能表明只有深度的 AI 采纳才能带来生产率提升；另一方面处理组仅 1.1\%（$n = 1{,}685$），估计精度有限。
+
+\textbf{（4）替换结果变量。}使用自我报告的生产率变化百分比时，估计值为 2.698（$p < 0.001$），高度显著。但该变量为回顾性主观评价，易受测量误差和反向因果影响。
+
+综合来看，基准结果在多种设定下保持稳健：控制企业特征后，AI 采纳对生产率的因果效应不显著。
+
+\subsection{内生性诊断}\label{sec:diagnostics}
+
+本节通过四项检验评估 DML 识别假设的合理性。\textbf{共同支撑检验}显示两组倾向得分在 $[0.1, 0.9]$ 区间内有良好重叠，极端占比均低于 1\%（图~\ref{fig:diagnostics} 左）。\textbf{安慰剂检验}将 $Y$ 随机打乱后重新估计，5 次重复中假阳性率为 0\%（所有 $p > 0.05$），DML 估计量没有系统性偏误。\textbf{协变量平衡检验}显示残差化后 $|\text{corr}(\tilde D, X)|$ 均值从 0.233 降至 0.017，$\hat m(\cdot)$ 有效吸收了协变量对 $D$ 的解释力。\textbf{灵敏度分析}（图~\ref{fig:diagnostics} 右）表明即使添加与 $\tilde D$ 偏相关达 0.6 的未观测混淆变量，ATE 仍不显著（$p > 0.27$）。综合四项诊断，DML 的识别假设在本研究中具有合理性。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.47\textwidth]{../output/figures/fig5_overlap.pdf}
+\includegraphics[width=0.47\textwidth]{../output/figures/fig7_sensitivity.pdf}
+\caption{左：倾向得分分布（共同支撑）；右：未观测混淆灵敏度分析}
+\label{fig:diagnostics}
+\end{figure}
+
+\subsection{异质性与多值处理}\label{sec:heterogeneity}
+
+为进一步检验 AI 效应的异质性，本文分别在行业、企业规模、年份和自动化率四个维度进行子组 DML 估计，并以"无采纳"为参照组比较不同采纳深度的效应。
+
+\begin{table}[H]
+\centering
+\caption{异质性分析结果}
+\label{tab:heterogeneity}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccc}
+\toprule
+子组 & ATE & SE & $p$ 值 & $N$ \\
+\midrule
+全样本（基准） & 0.006 & 0.006 & 0.342 & 150000 \\
+大型企业 & 0.024 & 0.015 & 0.110 & 29448 \\
+初创企业 & $-$0.007 & 0.011 & 0.518 & 56685 \\
+零售 & 0.027 & 0.019 & 0.146 & 16377 \\
+咨询 & $-$0.027 & 0.021 & 0.196 & 12504 \\
+2026 年 & 0.016 & 0.013 & 0.221 & 37540 \\
+Partial vs None & 0.031 & 0.026 & 0.234 & 83998 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表~\ref{tab:heterogeneity} 报告了代表性子组的估计结果。所有子组的 ATE 均在统计上不显著（$p > 0.05$），进一步强化了"AI 采纳与生产率之间不存在显著因果效应"的核心结论。点估计呈现一些值得注意的模式：大型企业的效应（0.024）高于初创企业（$-$0.007），零售（0.027）高于咨询（$-$0.027），2026 年（0.016）高于 2023 年（0.004），部分采纳 vs 无采纳的效应（0.031）在三类多值比较中最高。这些方向性差异与经济直觉相符——大企业有更强的技术吸收能力、AI 效应可能需要时间积累——但均未达到统计显著水平，不宜过度解读。
+
+% ============================================================
+% 5. 结论
+% ============================================================
+\section{结论}\label{sec:conclusion}
+
+本文采用双重机器学习方法，基于 Global AI Adoption \& Workforce Impact 数据集，实证研究了 AI 技术采纳对企业劳动生产率的因果效应。在使用三种机器学习方法控制高维协变量后，未发现 AI 采纳对劳动生产率有统计上显著的因果效应，点估计的经济意义也有限。该结论在多种稳健性检验下保持一致；异质性分析进一步表明，在行业、企业规模、年份和自动化率等子组中该效应均不显著。本文为 AI 生产率效应的实证文献提供了基于 DML 方法的新证据，揭示了 AI 采纳与生产率之间的原始关联很大程度上可由企业特征差异所解释。
+
+本研究存在以下局限：一是数据为面板结构但本文仅进行了混合截面分析，未能利用企业固定效应控制不随时间变化的不可观测异质性；二是简单的二值化处理无法刻画 AI 采纳强度的渐进变化；三是 AI 的生产率效应可能存在滞后性。未来研究可在企业固定效应 DML、多值处理变量框架以及考虑滞后效应的动态设定等方向进行深入拓展。
+
+% ============================================================
+% 参考文献
+% ============================================================
+\begin{thebibliography}{9}
+\small
+
+\bibitem{acemoglu2018race}
+D.~Acemoglu and P.~Restrepo.
+\newblock The race between man and machine: Implications of technology for growth, factor shares, and employment.
+\newblock \textit{American Economic Review}, 108(6):1488--1542, 2018.
+
+\bibitem{bresnahan2002information}
+T.~F.~Bresnahan, E.~Brynjolfsson, and L.~M.~Hitt.
+\newblock Information technology, workplace organization, and the demand for skilled labor: Firm-level evidence.
+\newblock \textit{Quarterly Journal of Economics}, 117(1):339--376, 2002.
+
+\bibitem{chernozhukov2018double}
+V.~Chernozhukov, D.~Chetverikov, M.~Demirer, E.~Duflo, C.~Hansen, W.~Newey, and J.~Robins.
+\newblock Double/debiased machine learning for treatment and structural parameters.
+\newblock \textit{The Econometrics Journal}, 21(1):C1--C68, 2018.
+
+\bibitem{syverson2011determinants}
+C.~Syverson.
+\newblock What determines productivity?
+\newblock \textit{Journal of Economic Literature}, 49(2):326--365, 2011.
+
+\end{thebibliography}
+
+\clearpage
+\appendix
+\input{appendix_code}
+
+\end{document}

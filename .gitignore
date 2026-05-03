@@ -1,0 +1,22 @@
+# Raw data (not committed to GitHub)
+data/raw/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment specs (optional, user-specific)
+environment.yml
+requirements.txt

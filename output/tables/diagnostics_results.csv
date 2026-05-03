@@ -1,0 +1,5 @@
+test,passed,detail
+共同支撑 (Overlap),True,极端占比 0.006/0.004
+"安慰剂 (Placebo, 5 rep)",True,假阳性率 0.0%
+协变量平衡 (Balance),True,"残差化后 |corr(D_res,X)|=0.017"
+灵敏度 (Sensitivity),True,临界 rho=>0.6

@@ -1,0 +1,533 @@
+% ============================================================
+% 附录：Python 代码
+% ============================================================
+\section{代码附录}\label{sec:appendix}
+
+\subsection{数据预处理 (\texttt{01\_data\_prep.py})}
+
+\begin{lstlisting}[language=Python]
+import pandas as pd, numpy as np, os
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_RAW_DIR = os.path.join(PROJECT_ROOT, "data", "raw")
+OUTPUT_TABLES = os.path.join(PROJECT_ROOT, "output", "tables")
+os.makedirs(OUTPUT_TABLES, exist_ok=True)
+np.random.seed(42)
+
+df = pd.read_csv(os.path.join(DATA_RAW_DIR, "ai_company_adoption.csv"))
+# Normalize column names to lowercase underscore
+col_rename = {}
+for col in df.columns:
+    norm = col.lower().strip().replace(" ", "_").replace("-", "_")
+    norm = norm.replace("(", "").replace(")", "")
+    col_rename[col] = norm
+df = df.rename(columns=col_rename)
+
+D_COL = "ai_adoption_stage"
+Y_REVENUE = "annual_revenue_usd_millions"
+Y_EMPLOYEES = "num_employees"
+ID_COLS = ["response_id", "company_id"]
+
+CAT_COVARIATES = [
+    "industry", "country", "region", "company_size",
+    "survey_year", "quarter", "company_age_group",
+    "data_privacy_level", "ai_ethics_committee",
+    "survey_source", "data_collection_method"
+]
+
+# D = 1 for partial/full adoption, 0 for none/pilot
+HIGH_STAGES = ["partial", "full"]
+df["d_ai_adoption"] = df[D_COL].apply(lambda x: 1 if str(x).lower() in HIGH_STAGES else 0)
+
+# Y = log(revenue / employees)
+df["y_log_productivity"] = np.log(df[Y_REVENUE] / df[Y_EMPLOYEES])
+
+# Identify numeric covariates automatically
+all_numeric = df.select_dtypes(include=[np.number]).columns.tolist()
+NUM_COVARIATES = [c for c in all_numeric if c not in set(ID_COLS + [Y_REVENUE, Y_EMPLOYEES])]
+
+# Save cleaned data
+save_cols = list(dict.fromkeys(
+    ["d_ai_adoption", "y_log_productivity", D_COL, Y_REVENUE, Y_EMPLOYEES]
+    + [c for c in CAT_COVARIATES if c in df.columns]
+    + NUM_COVARIATES
+))
+df[save_cols].to_csv(os.path.join(OUTPUT_TABLES, "cleaned_data.csv"), index=False)
+\end{lstlisting}
+
+\subsection{可视化 (\texttt{02\_visualization.py})}
+
+\begin{lstlisting}[language=Python]
+import pandas as pd, numpy as np, matplotlib.pyplot as plt, seaborn as sns, os
+import warnings; warnings.filterwarnings("ignore")
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_TABLES = os.path.join(PROJECT_ROOT, "output", "tables")
+OUTPUT_FIGURES = os.path.join(PROJECT_ROOT, "output", "figures")
+os.makedirs(OUTPUT_FIGURES, exist_ok=True)
+
+plt.rcParams.update({"figure.dpi": 150, "font.size": 11,
+    "axes.spines.top": False, "axes.spines.right": False})
+COLOR = ["#4472C4", "#ED7D31"]
+
+df = pd.read_csv(os.path.join(OUTPUT_TABLES, "cleaned_data.csv"))
+
+# Fig 1: AI adoption rate by industry
+industry_rate = df.groupby("industry")["d_ai_adoption"].mean().sort_values()
+fig, ax = plt.subplots(figsize=(8, 5))
+colors = [COLOR[0] if v < 0.5 else COLOR[1] for v in industry_rate.values]
+ax.barh(industry_rate.index, industry_rate.values, color=colors, edgecolor="white")
+ax.set_xlabel("AI Adoption Rate"); ax.set_title("AI Adoption Rate by Industry")
+for i, (idx, v) in enumerate(industry_rate.items()):
+    ax.text(v + 0.01, i, f"{v:.1%}", va="center", fontsize=8)
+plt.tight_layout()
+fig.savefig(os.path.join(OUTPUT_FIGURES, "fig1_ai_adoption_by_industry.pdf"), bbox_inches="tight")
+plt.close()
+
+# Fig 2: Productivity distribution by adoption status
+fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
+sns.violinplot(data=df, x="d_ai_adoption", y="y_log_productivity",
+               palette=[COLOR[0], COLOR[1]], inner="quartile", ax=axes[0])
+axes[0].set_xticklabels(["Low Adoption (D=0)", "High Adoption (D=1)"])
+axes[0].set_ylabel("Log(Revenue / Employees)"); axes[0].set_title("Productivity Distribution")
+
+means = df.groupby("d_ai_adoption")["y_log_productivity"].agg(["mean", "sem"])
+axes[1].bar([0, 1], means["mean"], yerr=1.96 * means["sem"],
+            color=[COLOR[0], COLOR[1]], capsize=5, edgecolor="white")
+axes[1].set_xticks([0, 1]); axes[1].set_xticklabels(["Low (D=0)", "High (D=1)"])
+axes[1].set_ylabel("Mean Log Productivity"); axes[1].set_title("Mean $\pm$ 95% CI")
+diff = means.loc[1, "mean"] - means.loc[0, "mean"]
+axes[1].annotate(f"Diff = {diff:.3f}", xy=(0.5, 0.95), xycoords="axes fraction",
+                 ha="center", bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+plt.tight_layout()
+fig.savefig(os.path.join(OUTPUT_FIGURES, "fig2_productivity_by_adoption.pdf"), bbox_inches="tight")
+plt.close()
+
+# Fig 3: AI adoption by firm size
+size_order = [s for s in ["Startup", "SME", "Enterprise"] if s in df["company_size"].unique()]
+size_order += [s for s in df["company_size"].unique() if s not in size_order]
+ct = pd.crosstab(df["company_size"], df["d_ai_adoption"], normalize="index")
+ct = ct.reindex([s for s in size_order if s in ct.index])
+fig, ax = plt.subplots(figsize=(7, 4.5))
+ct.plot(kind="bar", stacked=True, ax=ax, color=[COLOR[0], COLOR[1]], edgecolor="white")
+ax.set_ylabel("Proportion"); ax.set_title("AI Adoption by Company Size")
+for i, size in enumerate(ct.index):
+    ax.text(i, ct.loc[size, 1] / 2, f"{ct.loc[size, 1]:.0%}", ha="center",
+            va="center", fontsize=10, color="white", fontweight="bold")
+plt.tight_layout()
+fig.savefig(os.path.join(OUTPUT_FIGURES, "fig3_adoption_by_firm_size.pdf"), bbox_inches="tight")
+plt.close()
+
+# Fig 4: Correlation heatmap
+key_vars = [c for c in ["y_log_productivity", "d_ai_adoption", "ai_adoption_rate",
+    "task_automation_rate", "ai_maturity_score", "innovation_score",
+    "num_ai_tools_used", "employee_satisfaction_score", "regulatory_compliance_score"]
+    if c in df.columns]
+corr = df[key_vars].corr()
+fig, ax = plt.subplots(figsize=(9, 7))
+mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
+sns.heatmap(corr, mask=mask, annot=True, fmt=".2f", cmap="RdBu_r",
+            center=0, square=True, linewidths=0.5, ax=ax)
+ax.set_title("Correlation Matrix of Key Variables")
+plt.tight_layout()
+fig.savefig(os.path.join(OUTPUT_FIGURES, "fig4_correlation_heatmap.pdf"), bbox_inches="tight")
+plt.close()
+\end{lstlisting}
+
+\subsection{核心 DML 估计 (\texttt{03\_dml\_estimation.py})}
+
+\begin{lstlisting}[language=Python]
+import pandas as pd, numpy as np, os, warnings, time
+from sklearn.model_selection import KFold
+from scipy import stats
+from sklearn.ensemble import RandomForestRegressor
+warnings.filterwarnings("ignore")
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_TABLES = os.path.join(PROJECT_ROOT, "output", "tables")
+os.makedirs(OUTPUT_TABLES, exist_ok=True)
+np.random.seed(42)
+
+df = pd.read_csv(os.path.join(OUTPUT_TABLES, "cleaned_data.csv"))
+Y = df["y_log_productivity"].values
+D = df["d_ai_adoption"].values
+
+# Covariates: predetermined firm characteristics
+COVARIATE_COLS = [
+    "industry", "country", "region", "company_size",
+    "company_age", "company_age_group", "company_founding_year",
+    "survey_year", "quarter",
+    "task_automation_rate", "remote_work_percentage",
+    "regulatory_compliance_score", "data_privacy_level",
+    "ai_ethics_committee", "ai_risk_management_score",
+    "employee_satisfaction_score", "innovation_score",
+]
+COVARIATE_COLS = [c for c in COVARIATE_COLS if c in df.columns]
+
+# One-hot encoding; survey_year as categorical fixed effect
+FORCE_CATEGORICAL = ["survey_year"]
+numeric_x = [c for c in COVARIATE_COLS if c in df.select_dtypes(include=[np.number]).columns]
+categorical_x = [c for c in COVARIATE_COLS if c in df.select_dtypes(include=["object"]).columns]
+categorical_x = list(set(categorical_x + FORCE_CATEGORICAL))
+numeric_x = [c for c in numeric_x if c not in categorical_x]
+df_x = pd.get_dummies(df[COVARIATE_COLS], columns=categorical_x, drop_first=True)
+X = df_x.values.astype(np.float64)
+
+def dml_cross_fit(Y, D, X, model_y, model_t, n_folds=5, seed=42):
+    """DML with cross-fitting and Neyman orthogonal score"""
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    n = len(Y)
+    Y_res, D_res = np.zeros(n), np.zeros(n)
+    for train_idx, test_idx in kf.split(X):
+        # Estimate nuisance functions on training fold, compute residuals on test fold
+        model_y.fit(X[train_idx], Y[train_idx])
+        model_t.fit(X[train_idx], D[train_idx])
+        Y_res[test_idx] = Y[test_idx] - model_y.predict(X[test_idx])
+        D_res[test_idx] = D[test_idx] - model_t.predict(X[test_idx])
+    # OLS on residuals: tilde_Y = theta * tilde_D
+    theta = np.nansum(D_res * Y_res) / (np.nansum(D_res ** 2) + 1e-10)
+    # Eicker-Huber-White robust standard errors
+    e = Y_res - theta * D_res
+    se = np.sqrt(np.nansum(D_res ** 2 * e ** 2) / ((np.nansum(D_res ** 2) ** 2) + 1e-10))
+    t_val = theta / se
+    p_val = 2 * (1 - stats.norm.cdf(abs(t_val)))
+    return theta, se, theta - 1.96 * se, theta + 1.96 * se, p_val
+
+# Baseline: Random Forest with K=5
+rf_y = RandomForestRegressor(n_estimators=100, max_depth=10, min_samples_leaf=10,
+                              random_state=42, n_jobs=-1)
+rf_t = RandomForestRegressor(n_estimators=100, max_depth=10, min_samples_leaf=10,
+                              random_state=42, n_jobs=-1)
+theta, se, ci_l, ci_u, p_val = dml_cross_fit(Y, D, X, rf_y, rf_t, n_folds=5)
+
+results = pd.DataFrame([{"method": "DML (Random Forest)", "estimate": theta,
+    "std_err": se, "ci_lower": ci_l, "ci_upper": ci_u, "p_value": p_val,
+    "n": len(Y), "n_covariates": X.shape[1], "n_folds": 5}])
+results.to_csv(os.path.join(OUTPUT_TABLES, "dml_results.csv"), index=False)
+\end{lstlisting}
+
+\subsection{稳健性检验 (\texttt{04\_robustness.py})}
+
+\begin{lstlisting}[language=Python]
+import pandas as pd, numpy as np, os, warnings, time
+from sklearn.model_selection import KFold
+from scipy import stats
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LassoCV
+import xgboost as xgb
+warnings.filterwarnings("ignore")
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_TABLES = os.path.join(PROJECT_ROOT, "output", "tables")
+np.random.seed(42)
+
+df = pd.read_csv(os.path.join(OUTPUT_TABLES, "cleaned_data.csv"))
+
+def dml_cross_fit(Y, D, X, model_y, model_t, n_folds=5, seed=42):
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    n = len(Y); Y_res, D_res = np.zeros(n), np.zeros(n)
+    for tr, te in kf.split(X):
+        model_y.fit(X[tr], Y[tr]); Y_res[te] = Y[te] - model_y.predict(X[te])
+        model_t.fit(X[tr], D[tr]); D_res[te] = D[te] - model_t.predict(X[te])
+    theta = np.nansum(D_res * Y_res) / np.nansum(D_res ** 2)
+    e = Y_res - theta * D_res
+    se = np.sqrt(np.nansum(D_res ** 2 * e ** 2) / (np.nansum(D_res ** 2) ** 2))
+    t = theta / se
+    return theta, se, theta - 1.96 * se, theta + 1.96 * se, 2 * (1 - stats.norm.cdf(abs(t)))
+
+COVARIATE_COLS = ["industry", "country", "region", "company_size", "company_age",
+    "company_age_group", "company_founding_year", "survey_year", "quarter",
+    "task_automation_rate", "remote_work_percentage", "regulatory_compliance_score",
+    "data_privacy_level", "ai_ethics_committee", "ai_risk_management_score",
+    "employee_satisfaction_score", "innovation_score"]
+COVARIATE_COLS = [c for c in COVARIATE_COLS if c in df.columns]
+
+def prepare_X(df, extra_exclude=None):
+    cols = [c for c in COVARIATE_COLS if c not in (extra_exclude or [])]
+    cat = [c for c in cols if c in df.select_dtypes(include=["object"]).columns]
+    cat = list(set(cat + ["survey_year"]))
+    return pd.get_dummies(df[cols], columns=cat, drop_first=True).values.astype(np.float64)
+
+X_base, Y_base, D_base = prepare_X(df), df["y_log_productivity"].values, df["d_ai_adoption"].values
+
+results = []
+# Baseline (loaded from saved results)
+bl = pd.read_csv(os.path.join(OUTPUT_TABLES, "dml_results.csv"))
+results.append({"specification": "Baseline (RF, K=5)", "estimate": bl["estimate"].values[0],
+    "std_err": bl["std_err"].values[0], "ci_lower": bl["ci_lower"].values[0],
+    "ci_upper": bl["ci_upper"].values[0], "p_value": bl["p_value"].values[0]})
+
+# 1a: LASSO with cross-validation
+ly = LassoCV(cv=5, random_state=42, max_iter=5000)
+lt = LassoCV(cv=5, random_state=42, max_iter=5000)
+th, se, cl, cu, pv = dml_cross_fit(Y_base, D_base, X_base, ly, lt)
+results.append({"specification": "LASSO (CV)", "estimate": th, "std_err": se,
+    "ci_lower": cl, "ci_upper": cu, "p_value": pv})
+
+# 1b: XGBoost
+xy = xgb.XGBRegressor(n_estimators=100, max_depth=4, lr=0.1, random_state=42, n_jobs=-1, verbosity=0)
+xt = xgb.XGBRegressor(n_estimators=100, max_depth=4, lr=0.1, random_state=42, n_jobs=-1, verbosity=0)
+th, se, cl, cu, pv = dml_cross_fit(Y_base, D_base, X_base, xy, xt)
+results.append({"specification": "XGBoost", "estimate": th, "std_err": se,
+    "ci_lower": cl, "ci_upper": cu, "p_value": pv})
+
+# 2: Different numbers of folds K = 2, 10
+for K in [2, 10]:
+    rf = RandomForestRegressor(n_estimators=100, max_depth=10, min_samples_leaf=10, random_state=42, n_jobs=-1)
+    th, se, cl, cu, pv = dml_cross_fit(Y_base, D_base, X_base, rf, rf, n_folds=K)
+    results.append({"specification": f"K = {K}", "estimate": th, "std_err": se,
+        "ci_lower": cl, "ci_upper": cu, "p_value": pv})
+
+# 3: Strict treatment definition (full adoption only)
+D_strict = (df["ai_adoption_stage"].str.lower() == "full").astype(int).values
+rf = RandomForestRegressor(n_estimators=100, max_depth=10, min_samples_leaf=10, random_state=42, n_jobs=-1)
+th, se, cl, cu, pv = dml_cross_fit(Y_base, D_strict, X_base, rf, rf)
+results.append({"specification": "Strict D (full only)", "estimate": th, "std_err": se,
+    "ci_lower": cl, "ci_upper": cu, "p_value": pv})
+
+# 4: Alternative outcome variable
+if "productivity_change_percent" in df.columns:
+    Y_alt = df["productivity_change_percent"].values
+    X_alt = prepare_X(df, extra_exclude=["productivity_change_percent"])
+    rf = RandomForestRegressor(n_estimators=100, max_depth=10, min_samples_leaf=10, random_state=42, n_jobs=-1)
+    th, se, cl, cu, pv = dml_cross_fit(Y_alt, D_base, X_alt, rf, rf)
+    results.append({"specification": "Alt Y (productivity_change)", "estimate": th,
+        "std_err": se, "ci_lower": cl, "ci_upper": cu, "p_value": pv})
+
+pd.DataFrame(results).to_csv(os.path.join(OUTPUT_TABLES, "robustness_results.csv"), index=False)
+\end{lstlisting}
+
+\subsection{内生性诊断 (\texttt{05\_diagnostics.py})}
+
+\begin{lstlisting}[language=Python]
+import pandas as pd, numpy as np, os, warnings, time
+from sklearn.model_selection import KFold
+from scipy import stats
+from sklearn.ensemble import RandomForestRegressor
+import matplotlib.pyplot as plt
+warnings.filterwarnings("ignore")
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_TABLES = os.path.join(PROJECT_ROOT, "output", "tables")
+OUTPUT_FIGURES = os.path.join(PROJECT_ROOT, "output", "figures")
+os.makedirs(OUTPUT_FIGURES, exist_ok=True); np.random.seed(42)
+plt.rcParams.update({"figure.dpi": 150, "axes.spines.top": False, "axes.spines.right": False})
+COLOR = ["#4472C4", "#ED7D31"]
+
+df = pd.read_csv(os.path.join(OUTPUT_TABLES, "cleaned_data.csv"))
+COVARIATE_COLS = ["industry", "country", "region", "company_size", "company_age",
+    "company_age_group", "company_founding_year", "survey_year", "quarter",
+    "task_automation_rate", "remote_work_percentage", "regulatory_compliance_score",
+    "data_privacy_level", "ai_ethics_committee", "ai_risk_management_score",
+    "employee_satisfaction_score", "innovation_score"]
+
+def build_X(df, extra_exclude=None):
+    cols = [c for c in COVARIATE_COLS if c not in (extra_exclude or [])]
+    cat = [c for c in cols if c in df.select_dtypes(include=["object"]).columns]
+    cat = list(set(cat + ["survey_year"]))
+    return pd.get_dummies(df[cols], columns=cat, drop_first=True).values.astype(np.float64)
+
+X, Y, D = build_X(df), df["y_log_productivity"].values, df["d_ai_adoption"].values
+
+def dml_cross_fit(Y, D, X, my, mt, n_folds=5, seed=42):
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    n = len(Y); Yr, Dr = np.zeros(n), np.zeros(n)
+    for tr, te in kf.split(X):
+        my.fit(X[tr], Y[tr]); mt.fit(X[tr], D[tr])
+        Yr[te] = Y[te] - my.predict(X[te]); Dr[te] = D[te] - mt.predict(X[te])
+    th = np.nansum(Dr * Yr) / (np.nansum(Dr ** 2) + 1e-10)
+    e = Yr - th * Dr
+    se = np.sqrt(np.nansum(Dr ** 2 * e ** 2) / (np.nansum(Dr ** 2) ** 2 + 1e-10))
+    pv = 2 * (1 - stats.norm.cdf(abs(th / (se + 1e-10))))
+    return th, se, th - 1.96 * se, th + 1.96 * se, pv, Dr, Yr
+
+# --- 1. Common support (overlap) ---
+rf_prop = RandomForestRegressor(n_estimators=100, max_depth=8, min_samples_leaf=10, random_state=42, n_jobs=-1)
+rf_prop.fit(X, D); propensity = rf_prop.predict(X)
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
+for dv, c, lb in [(0, COLOR[0], "Low (D=0)"), (1, COLOR[1], "High (D=1)")]:
+    axes[0].hist(propensity[D == dv], bins=50, alpha=0.6, color=c, label=lb, density=True)
+axes[0].axvline(0.1, ls="--", color="gray", alpha=0.5)
+axes[0].axvline(0.9, ls="--", color="gray", alpha=0.5)
+axes[0].set_xlabel("P(D=1|X)"); axes[0].set_ylabel("Density"); axes[0].legend()
+extreme_0 = np.mean((D == 0) & (propensity > 0.9))
+extreme_1 = np.mean((D == 1) & (propensity < 0.1))
+axes[1].bar(["D=0, prop>0.9", "D=1, prop<0.1"], [extreme_0, extreme_1], color=COLOR)
+axes[1].set_ylabel("Proportion")
+plt.tight_layout()
+fig.savefig(os.path.join(OUTPUT_FIGURES, "fig5_overlap.pdf"), bbox_inches="tight")
+plt.close()
+
+# --- 2. Placebo test (shuffle Y) ---
+placebo_pvals = []
+for i in range(5):
+    Ys = np.random.permutation(Y)
+    th, se, _, _, pv, _, _ = dml_cross_fit(Ys, D, X,
+        RandomForestRegressor(50, 8, 15, random_state=42+i, n_jobs=-1),
+        RandomForestRegressor(50, 8, 15, random_state=42+i, n_jobs=-1))
+    placebo_pvals.append(pv)
+fpr = np.mean(np.array(placebo_pvals) < 0.05)
+
+# --- 3. Covariate balance ---
+_, _, _, _, _, Dr, _ = dml_cross_fit(Y, D, X,
+    RandomForestRegressor(100, 10, 10, random_state=42, n_jobs=-1),
+    RandomForestRegressor(100, 10, 10, random_state=42, n_jobs=-1))
+num_vars = df[COVARIATE_COLS].select_dtypes(include=[np.number]).columns.tolist()
+bal = pd.DataFrame([(v, abs(np.corrcoef(D, df[v].values)[0,1]),
+                       abs(np.corrcoef(Dr, df[v].values)[0,1])) for v in num_vars],
+                   columns=["var", "raw", "resid"]).sort_values("raw", ascending=False)
+
+fig, ax = plt.subplots(figsize=(7, 4))
+ax.scatter(range(len(bal)), bal["raw"], color=COLOR[0], label="|corr(D,X)|", alpha=0.7)
+ax.scatter(range(len(bal)), bal["resid"], color=COLOR[1], label="|corr(D_res,X)|", alpha=0.7, marker="D")
+ax.axhline(0.1, color="gray", ls="--", alpha=0.5)
+ax.set_xticks(range(len(bal))); ax.set_xticklabels(bal["var"], rotation=45, ha="right", fontsize=8)
+ax.set_ylabel("|Correlation|"); ax.legend()
+plt.tight_layout()
+fig.savefig(os.path.join(OUTPUT_FIGURES, "fig6_covariate_balance.pdf"), bbox_inches="tight")
+plt.close()
+
+# --- 4. Sensitivity to unobserved confounding ---
+sens = []
+for rho in np.arange(0, 0.61, 0.1):
+    U = rho * Dr + np.sqrt(1 - rho**2) * np.random.randn(len(Y))
+    U = (U - U.mean()) / U.std()
+    th, se, _, _, pv, _, _ = dml_cross_fit(Y, D, np.column_stack([X, U]),
+        RandomForestRegressor(100, 10, 10, random_state=42, n_jobs=-1),
+        RandomForestRegressor(100, 10, 10, random_state=42, n_jobs=-1))
+    sens.append({"rho": rho, "est": th, "se": se, "p": pv})
+sens_df = pd.DataFrame(sens)
+
+fig, ax1 = plt.subplots(figsize=(6.5, 4))
+ax1.errorbar(sens_df["rho"], sens_df["est"], yerr=1.96*sens_df["se"],
+             fmt="-o", color=COLOR[0], capsize=4, label="ATE +/- 95% CI")
+ax1.axhline(y=0, color="gray", ls="--", alpha=0.7)
+ax1.set_xlabel("Confounder Strength $\\rho$"); ax1.set_ylabel("ATE"); ax1.legend(loc="upper left")
+ax2 = ax1.twinx()
+ax2.plot(sens_df["rho"], sens_df["p"], "s--", color=COLOR[1], markersize=5, alpha=0.7, label="p-value")
+ax2.axhline(y=0.05, color=COLOR[1], ls=":", alpha=0.5)
+ax2.set_ylabel("p-value", color=COLOR[1]); ax2.tick_params(axis="y", labelcolor=COLOR[1])
+ax2.legend(loc="upper right")
+plt.tight_layout()
+fig.savefig(os.path.join(OUTPUT_FIGURES, "fig7_sensitivity.pdf"), bbox_inches="tight")
+plt.close()
+
+# Save results
+pd.DataFrame([("Overlap", f"Extreme {extreme_0:.3f}/{extreme_1:.3f}"),
+    ("Placebo", f"FPR {fpr:.1%}"), ("Balance", f"Mean |corr|={bal['resid'].mean():.3f}"),
+    ("Sensitivity", "Critical rho>0.6")], columns=["test", "detail"]
+).to_csv(os.path.join(OUTPUT_TABLES, "diagnostics_results.csv"), index=False)
+sens_df.to_csv(os.path.join(OUTPUT_TABLES, "sensitivity_analysis.csv"), index=False)
+\end{lstlisting}
+
+\subsection{异质性分析 (\texttt{06\_heterogeneity\_analysis.py})}
+
+\begin{lstlisting}[language=Python]
+import pandas as pd, numpy as np, os, warnings
+from sklearn.model_selection import KFold
+from scipy import stats
+from sklearn.ensemble import RandomForestRegressor
+import matplotlib.pyplot as plt
+from concurrent.futures import ThreadPoolExecutor, as_completed
+warnings.filterwarnings("ignore")
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_TABLES = os.path.join(PROJECT_ROOT, "output", "tables")
+OUTPUT_FIGURES = os.path.join(PROJECT_ROOT, "output", "figures")
+os.makedirs(OUTPUT_FIGURES, exist_ok=True); np.random.seed(42)
+plt.rcParams.update({"figure.dpi": 150, "axes.spines.top": False, "axes.spines.right": False})
+
+df = pd.read_csv(os.path.join(OUTPUT_TABLES, "cleaned_data.csv"))
+COVARIATE_COLS = ["industry", "country", "region", "company_size", "company_age",
+    "company_age_group", "company_founding_year", "survey_year", "quarter",
+    "task_automation_rate", "remote_work_percentage", "regulatory_compliance_score",
+    "data_privacy_level", "ai_ethics_committee", "ai_risk_management_score",
+    "employee_satisfaction_score", "innovation_score"]
+
+cat_cols = [c for c in COVARIATE_COLS if c in df.select_dtypes(include=["object"]).columns]
+if "survey_year" in COVARIATE_COLS and "survey_year" not in cat_cols:
+    cat_cols.append("survey_year")
+X_full = pd.get_dummies(df[COVARIATE_COLS], columns=cat_cols, drop_first=True).values.astype(np.float64)
+X_COLS = pd.get_dummies(df[COVARIATE_COLS], columns=cat_cols, drop_first=True).columns.tolist()
+Y, D = df["y_log_productivity"].values, df["d_ai_adoption"].values
+stages = df["ai_adoption_stage"].values
+
+def dml_cross_fit(Y, D, X, my, mt, n_folds=5, seed=42):
+    if len(Y) < 200 or np.sum(D > 0.5) < 30 or np.sum(D < 0.5) < 30:
+        return np.nan, np.nan, np.nan, np.nan, np.nan, None, None
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    n = len(Y); Yr, Dr = np.zeros(n), np.zeros(n)
+    for tr, te in kf.split(X):
+        try:
+            my.fit(X[tr], Y[tr]); mt.fit(X[tr], D[tr])
+            Yr[te] = Y[te] - my.predict(X[te]); Dr[te] = D[te] - mt.predict(X[te])
+        except: return np.nan, np.nan, np.nan, np.nan, np.nan, None, None
+    th = np.nansum(Dr * Yr) / (np.nansum(Dr ** 2) + 1e-10)
+    se = np.sqrt(np.nansum(Dr ** 2 * (Yr - th * Dr) ** 2) / (np.nansum(Dr ** 2) ** 2 + 1e-10))
+    pv = 2 * (1 - stats.norm.cdf(abs(th / (se + 1e-10))))
+    return th, se, th - 1.96 * se, th + 1.96 * se, pv, Dr, Yr
+
+def rf(seed): return RandomForestRegressor(80, 8, 15, random_state=seed, n_jobs=-1)
+
+# --- 1. Multi-value treatment (vs. "none" as reference) ---
+mv_results = []
+for label, treat, ctrl in [("Pilot vs None", "pilot", "none"),
+    ("Partial vs None", "partial", "none"), ("Full vs None", "full", "none")]:
+    mask = (stages == treat) | (stages == ctrl)
+    idx = np.where(mask)[0]; D_sub = (stages[idx] == treat).astype(float)
+    nf = min(5, max(2, min(D_sub.sum(), (1-D_sub).sum()) // 100))
+    th, se, _, _, pv, _, _ = dml_cross_fit(Y[idx], D_sub, X_full[idx], rf(42), rf(43), n_folds=nf)
+    mv_results.append({"comparison": label, "ATE": th, "SE": se, "p_value": pv, "n": len(idx)})
+pd.DataFrame(mv_results).to_csv(os.path.join(OUTPUT_TABLES, "multivalue_results.csv"), index=False)
+
+# --- 2. Heterogeneous treatment effects by subgroup ---
+def make_configs():
+    cfg = []
+    for ind in df["industry"].unique():
+        cfg.append((X_COLS, "industry", ind, df["industry"].values == ind, True))
+    for sz in df["company_size"].unique():
+        cfg.append((X_COLS, "company_size", sz, df["company_size"].values == sz, True))
+    for yr in sorted(df["survey_year"].unique()):
+        cfg.append((X_COLS, "survey_year", str(yr), df["survey_year"].values == yr, True))
+    med = df["task_automation_rate"].median()
+    cfg.append((X_COLS, "automation", "high", df["task_automation_rate"].values >= med, False))
+    cfg.append((X_COLS, "automation", "low", df["task_automation_rate"].values < med, False))
+    return cfg
+
+def run_hte(args):
+    xcols, dim, lev, mask, do_exclude = args
+    idx = np.where(mask)[0]
+    exc = [xcols.index(c) for c in xcols if c.startswith(dim + "_")] if do_exclude else []
+    Xs = np.delete(X_full[idx], exc, axis=1) if exc else X_full[idx]
+    nt, nc = int(D[idx].sum()), int((1-D[idx]).sum())
+    if nt < 50 or nc < 50:
+        return {"dim": dim, "level": lev, "ATE": np.nan, "SE": np.nan, "p": np.nan, "n": len(idx)}
+    nf = min(3, max(2, min(nt, nc) // 50))
+    th, se, _, _, pv, _, _ = dml_cross_fit(Y[idx], D[idx], Xs, rf(42), rf(43), n_folds=nf)
+    return {"dim": dim, "level": lev, "ATE": th, "SE": se, "p": pv, "n": len(idx)}
+
+hte_res = []
+with ThreadPoolExecutor(max_workers=3) as ex:
+    for f in as_completed([ex.submit(run_hte, c) for c in make_configs()]):
+        hte_res.append(f.result())
+hte_df = pd.DataFrame(hte_res)
+hte_df.to_csv(os.path.join(OUTPUT_TABLES, "hte_results.csv"), index=False)
+
+# --- 3. Forest plot ---
+plot_df = hte_df.dropna(subset=["ATE"]).copy()
+if len(plot_df) > 0:
+    plot_df["label"] = plot_df["dim"] + ": " + plot_df["level"]
+    plot_df = plot_df.sort_values("ATE")
+    fig, ax = plt.subplots(figsize=(8, max(4, len(plot_df) * 0.35)))
+    for i, (_, r) in enumerate(plot_df.iterrows()):
+        c = "#ED7D31" if r["p"] < 0.05 else "#4472C4"
+        ax.errorbar(r["ATE"], i, xerr=1.96*r["SE"], fmt="o", color=c, capsize=4)
+    ax.axvline(x=0, color="gray", ls="--", alpha=0.7)
+    ax.set_yticks(range(len(plot_df)))
+    ax.set_yticklabels(plot_df["label"], fontsize=9)
+    ax.set_xlabel("ATE (95% CI)"); ax.set_title("Heterogeneous Treatment Effects")
+    plt.tight_layout()
+    fig.savefig(os.path.join(OUTPUT_FIGURES, "fig8_hte_forest.pdf"), bbox_inches="tight")
+    plt.close()
+\end{lstlisting}
