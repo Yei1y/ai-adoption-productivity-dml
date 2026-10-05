@@ -1,0 +1,20 @@
+# AI 采纳对企业生产率的因果效应 —— 双重机器学习项目依赖
+# 安装: pip install -r requirements.txt
+# 开发环境: Python 3.11 (Anaconda env: python31111)
+
+# --- 数据处理 ---
+pandas>=2.0
+numpy>=1.26
+scipy>=1.11
+
+# --- 机器学习 / 因果推断 ---
+scikit-learn>=1.3
+xgboost>=2.0
+econml>=0.15          # CausalForestDML (scripts/06)
+
+# --- 可视化 ---
+matplotlib>=3.8
+seaborn>=0.13
+
+# --- 图表导出 (scripts/07) ---
+PyMuPDF>=1.24

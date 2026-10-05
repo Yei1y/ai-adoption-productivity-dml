@@ -25,6 +25,5 @@ AGENTS.md
 .codex/
 .dsh/
 
-# Environment specs (optional, user-specific)
+# Environment specs (user-specific conda env; requirements.txt IS tracked)
 environment.yml
-requirements.txt
