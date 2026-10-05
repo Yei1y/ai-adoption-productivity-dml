@@ -78,9 +78,10 @@ ai-adoption-productivity-dml/
 │   └── analysis_log.md           # Analysis log with interpretations
 ├── data/
 │   └── raw/                      # Raw data (not committed, download from Kaggle)
-├── CLAUDE.md                     # Project instructions for Claude Code
 └── README.md
 ```
+
+Local-only AI assistant notes (`CLAUDE.md`, `plan.md`) are kept out of version control via `.gitignore`.
 
 ## Execution Order
 

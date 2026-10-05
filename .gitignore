@@ -17,6 +17,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# AI assistant / scratch notes (kept locally, never published)
+CLAUDE.md
+plan.md
+AGENTS.md
+.claude/
+.codex/
+.dsh/
+
 # Environment specs (optional, user-specific)
 environment.yml
 requirements.txt
