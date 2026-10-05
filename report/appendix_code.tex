@@ -3,6 +3,29 @@
 % ============================================================
 \section{代码附录}\label{sec:appendix}
 
+\subsection{初始对话提示词}
+
+以下为本项目与 AI 助手的初始对话提示词。
+
+\begin{quote}\small
+我是经济统计本科生，想用 DML 方法研究 AI 采纳是否真的能提升企业生产率。数据是 Kaggle 上的 Global AI Adoption and Workforce Impact 数据集，大概 15 万条企业记录，变量有 AI 采纳阶段、营收、员工数、行业、规模、自动化率这些。
+
+我大概的想法是：D = AI 采纳（把 partial 和 full 算作处理组，none 和 pilot 算对照组）；Y = log(人均营收)；X = 行业、国家、规模、年龄、自动化率、远程办公比例、合规评分等等；方法用部分线性模型 + 5 折交叉拟合，nuisance 函数用随机森林估计；后面还想做稳健性（换 LASSO/XGBoost、改 K 折数、换变量定义）和异质性分析
+
+\noindent 能帮我规划一下整个流程吗？从数据预处理、可视化、核心估计到稳健性和诊断，每一步具体怎么做？另外变量构造和协变量选择上有什么需要注意的地方吗？
+\end{quote}
+
+\subsection{各脚本对应提示词}
+
+以下为各 Python 脚本对应的对话提示词。
+
+\medskip
+\noindent\textbf{01\_data\_prep.py}
+
+\begin{quote}\small
+帮我写一个数据预处理的脚本。读入 Kaggle 的 AI adoption 数据集，列名统一成小写下划线格式。构造二值处理变量（partial 和 full 算 1，none 和 pilot 算 0）和结果变量（log(revenue / employees)）。协变量自动识别分类和数值型，保留所有相关特征。最后输出清洗后的 csv 和一些基本信息统计（样本量、处理组比例、Y 的分布等）。涉及路径的话就先写占位符，我后面会改成相对路径。
+\end{quote}
+
 \subsection{数据预处理 (\texttt{01\_data\_prep.py})}
 
 \begin{lstlisting}[language=Python]
@@ -54,6 +77,13 @@ save_cols = list(dict.fromkeys(
 ))
 df[save_cols].to_csv(os.path.join(OUTPUT_TABLES, "cleaned_data.csv"), index=False)
 \end{lstlisting}
+
+\medskip
+\noindent\textbf{02\_visualization.py}
+
+\begin{quote}\small
+做一下数据可视化，给论文的数据部分用。需要四张图：各行业 AI 采纳率水平柱状图、处理组 vs 对照组的劳动生产率分布（小提琴图 + 均值 CI 图）、不同企业规模的采纳率堆叠图、主要连续变量的相关性热图。风格干净学术向，保存为 PDF。
+\end{quote}
 
 \subsection{可视化 (\texttt{02\_visualization.py})}
 
@@ -134,6 +164,13 @@ fig.savefig(os.path.join(OUTPUT_FIGURES, "fig4_correlation_heatmap.pdf"), bbox_i
 plt.close()
 \end{lstlisting}
 
+\medskip
+\noindent\textbf{03\_dml\_estimation.py}
+
+\begin{quote}\small
+手动实现 DML 交叉拟合估计，不用现成的高层 API。部分线性模型 Y = θD + g(X) + ε，用 5 折交叉拟合，Neyman 正交评分。nuisance 函数 E[Y|X] 和 E[D|X] 都用随机森林（100 棵树，max\_depth=10，min\_samples\_leaf=10）。计算 ATE、稳健标准误、95\% 置信区间和 p 值。协变量需要 one-hot 编码分类变量，注意把 survey\_year 当分类变量做固定效应处理。输出结果到 csv。
+\end{quote}
+
 \subsection{核心 DML 估计 (\texttt{03\_dml\_estimation.py})}
 
 \begin{lstlisting}[language=Python]
@@ -205,6 +242,13 @@ results = pd.DataFrame([{"method": "DML (Random Forest)", "estimate": theta,
     "n": len(Y), "n_covariates": X.shape[1], "n_folds": 5}])
 results.to_csv(os.path.join(OUTPUT_TABLES, "dml_results.csv"), index=False)
 \end{lstlisting}
+
+\medskip
+\noindent\textbf{04\_robustness.py}
+
+\begin{quote}\small
+做稳健性检验，一共四项：(1) 换 ML 方法——LASSO（CV 选 λ）和 XGBoost 各跑一次 DML；(2) 改交叉拟合折数 K=2 和 K=10；(3) 换处理变量定义——只把 full adoption 算作 D=1；(4) 换结果变量——用 productivity\_change\_percent 替代 log productivity。所有设定用相同的协变量集，结果汇总到一张表。
+\end{quote}
 
 \subsection{稳健性检验 (\texttt{04\_robustness.py})}
 
@@ -296,6 +340,13 @@ if "productivity_change_percent" in df.columns:
 
 pd.DataFrame(results).to_csv(os.path.join(OUTPUT_TABLES, "robustness_results.csv"), index=False)
 \end{lstlisting}
+
+\medskip
+\noindent\textbf{05\_diagnostics.py}
+
+\begin{quote}\small
+写一个内生性诊断脚本，检验 DML 的识别假设是否合理。包括：共同支撑检验（倾向得分分布 + 极端区域占比）、安慰剂检验（随机打乱 Y 跑 5 次看假阳性率）、协变量平衡（对比残差化前后 D 与各 X 的相关性）、灵敏度分析（构造不同 rho 水平的未观测混淆变量 U，看 ATE 估计的稳健性）。每个检验都要出图，最后汇总 pass/warn 结论。
+\end{quote}
 
 \subsection{内生性诊断 (\texttt{05\_diagnostics.py})}
 
@@ -420,6 +471,13 @@ pd.DataFrame([("Overlap", f"Extreme {extreme_0:.3f}/{extreme_1:.3f}"),
 ).to_csv(os.path.join(OUTPUT_TABLES, "diagnostics_results.csv"), index=False)
 sens_df.to_csv(os.path.join(OUTPUT_TABLES, "sensitivity_analysis.csv"), index=False)
 \end{lstlisting}
+
+\medskip
+\noindent\textbf{06\_heterogeneity\_analysis.py}
+
+\begin{quote}\small
+用 EconML 的 CausalForestDML 做异质性分析。跟基准回归用同样的协变量和 RF nuisance 模型设定。估计个体 CATE，输出 CATE 分布密度图（标注 ATE、10/90 分位数、正负尾部占比）和特征重要性排名图（one-hot dummy 的重要性归并回原始变量）。然后再切分子组跑一遍传统 HTE 做对照——按行业、规模、年份、自动化率中位数分组分别估计 ATE，画森林图。子组样本量太小的时候自动跳过。
+\end{quote}
 
 \subsection{异质性分析 (\texttt{06\_heterogeneity\_analysis.py})}
 
