@@ -4,13 +4,6 @@
 
 **基于双重机器学习（DML）与因果森林的 15 万家企业因果推断研究**
 
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
-![Method](https://img.shields.io/badge/Method-Double%20ML%20%2B%20Causal%20Forest-4DBBD5)
-![Sample](https://img.shields.io/badge/Sample-150%2C000%20firms-00A087)
-![Diagnostics](https://img.shields.io/badge/Diagnostics-4%2F4%20passed-91D1C2)
-![Reproducible](https://img.shields.io/badge/Reproducible-seed%2042-8491B4)
-![Paper](https://img.shields.io/badge/Paper-LaTeX%20PDF-F39B7F)
-
 </div>
 
 ---
@@ -35,7 +28,7 @@
 - [五、项目结构](#五项目结构)
 - [六、复现指南](#六复现指南)
 - [七、这个项目体现了哪些能力](#七这个项目体现了哪些能力)
-- [八、已知问题与后续计划](#八已知问题与后续计划)
+- [八、局限与后续计划](#八局限与后续计划)
 - [九、参考文献与引用](#九参考文献与引用)
 - [十、致谢与 AI 使用声明](#十致谢与-ai-使用声明)
 
@@ -194,7 +187,7 @@ $$
 
 | 处理水平 | ATE | 标准误 | p 值 | 解读 |
 |----------|-----|--------|------|------|
-| 试验阶段（pilot） | −0.014 | 0.014 | 0.332 | 点估计为负，或反映导入期调整成本 |
+| 试验阶段（pilot） | −0.014 | 0.014 | 0.333 | 点估计为负，或反映导入期调整成本 |
 | 部分采纳（partial） | +0.031 | 0.026 | 0.233 | 方向与理论预期一致但不显著 |
 | 全面采纳（full） | +0.025 | 0.175 | 0.885 | 标准误过大，几乎不含信息量 |
 
@@ -202,15 +195,15 @@ $$
 
 ### 4.4 异质性分析：子组切分与因果森林
 
-**（1）传统子组切分**（9 个行业 + 3 类规模 + 4 个年份 + 2 组自动化率 = 18 个子组，森林图见图 9）。所有子组在 5% 水平上均不显著，但点估计揭示了几组有经济学含义的模式：
+**（1）传统子组切分**（9 个行业 + 3 类规模 + 4 个年份 + 2 组自动化率 = 18 个子组，森林图见 [图 9](output/figures/png/fig10_hte_forest.png)）。所有子组在 5% 水平上均不显著，但点估计揭示了几组有经济学含义的模式：
 
 | 维度 | 子组 | ATE | p 值 |
 |------|------|-----|------|
 | 企业规模 | 大型企业 | +0.024 | 0.116（边际） |
 | | 初创企业 | −0.007 | 0.525 |
 | 行业 | 零售 | +0.027 | 0.145 |
-| | 咨询 | −0.027 | 0.187 |
-| 自动化率 | 高自动化 | −0.0002 | 0.981 |
+| | 咨询 | −0.027 | 0.188 |
+| 自动化率 | 高自动化 | −0.0002 | 0.982 |
 | | 低自动化 | +0.008 | 0.329 |
 
 **（2）因果森林（Causal Forest, Wager & Athey 2018）**。手动切分需事先选定维度、只能覆盖少数离散分组，无法自适应地在高维空间识别异质性。因此进一步用 `CausalForestDML` 在相同 64 维协变量下估计个体 **CATE**：
@@ -219,7 +212,7 @@ $$
 - **CATE 标准差 = 0.044，约为 ATE 的 8 倍**；P10/P90 = [−0.0488, 0.0595]；
 - **46.1% 的企业 CATE > 0.01（正向），34.6% 的企业 CATE < −0.01（负向）**，仅约 19% 集中在零附近。
 
-<img src="output/figures/png/fig8_hte_forest.png" width="52%" alt="子组处理效应森林图">
+<img src="output/figures/png/fig10_hte_forest.png" width="52%" alt="子组处理效应森林图">
 
 **图 9**　子组处理效应森林图（18 个子组，均不显著，符号分化）
 
@@ -238,6 +231,7 @@ ai-adoption-productivity-dml/
 │   ├── 04_robustness.py              # 稳健性：3 种 ML × 3 种折数 × 变量替换
 │   ├── 05_diagnostics.py             # 四类内生性诊断（fig5–fig7 与灵敏度曲线）
 │   ├── 06_heterogeneity_analysis.py  # 因果森林 CATE 与特征重要性
+│   ├── 06b_subgroup_hte.py           # 多值处理效应与子组 HTE（fig10 森林图）
 │   └── 07_export_figures_png.py      # 将 PDF 图表栅格化为 PNG（供 README 展示）
 ├── report/
 │   ├── paper.tex                     # 中文 LaTeX 论文（ctexart，XeLaTeX 编译）
@@ -251,6 +245,7 @@ ai-adoption-productivity-dml/
 ├── data/
 │   └── raw/                          # 原始数据（不入版本库，见第六节下载）
 ├── requirements.txt
+├── LICENSE                           # 代码 MIT；论文 CC BY 4.0
 └── README.md
 ```
 
@@ -285,6 +280,7 @@ python scripts/03_dml_estimation.py       # 基准估计（实测约 4 分钟）
 python scripts/04_robustness.py           # 稳健性检验
 python scripts/05_diagnostics.py          # 诊断检验（含安慰剂重复，耗时较长）
 python scripts/06_heterogeneity_analysis.py  # 因果森林（训练耗时较长）
+python scripts/06b_subgroup_hte.py            # 多值处理与子组 HTE（含 18 个子组并行拟合）
 
 # 4) 可选：导出 PNG 图表供 README / GitHub 页面展示
 python scripts/07_export_figures_png.py
@@ -308,7 +304,7 @@ cd report && xelatex paper.tex && xelatex paper.tex
 | 因果推断理论 | 部分线性模型设定、Neyman 正交评分、交叉拟合、识别假设的条件与检验 | [`report/paper.tex`](report/paper.tex) 第 3 节 |
 | 手写估计量实现 | 不依赖高层 API，手写 K 折交叉拟合与 Eicker–Huber–White 稳健标准误，并逐折检查残差方差 | [`scripts/03_dml_estimation.py`](scripts/03_dml_estimation.py) |
 | 高维机器学习 | LASSO / Random Forest / XGBoost 三类 nuisance 模型的对照实验与超参数设定 | [`scripts/04_robustness.py`](scripts/04_robustness.py) |
-| 异质性建模 | EconML `CausalForestDML` 个体 CATE 估计；将 one-hot 哑变量重要性**归并回原始变量** | [`scripts/06_heterogeneity_analysis.py`](scripts/06_heterogeneity_analysis.py) |
+| 异质性建模 | EconML `CausalForestDML` 个体 CATE 估计；将 one-hot 哑变量重要性**归并回原始变量**；18 个子组的并行 DML 估计与森林图 | [`06_heterogeneity_analysis.py`](scripts/06_heterogeneity_analysis.py)、[`06b_subgroup_hte.py`](scripts/06b_subgroup_hte.py) |
 | 计量诊断 | 共同支撑、安慰剂（假阳性率）、协变量平衡、遗漏变量灵敏度四类诊断的自行设计 | [`scripts/05_diagnostics.py`](scripts/05_diagnostics.py) |
 | 统计编程与数据工程 | 150,000 × 43 数据的清洗与变量构造；64 维 one-hot 协变量矩阵构建；全部估计结果结构化落盘 | `scripts/01`、[`logs/analysis_log.md`](logs/analysis_log.md) |
 | 数据可视化 | matplotlib / seaborn 出版级图表（小提琴图、相关系数热图、CATE 密度图、森林图），矢量 PDF 输出 | `output/figures/` |
@@ -319,16 +315,14 @@ cd report && xelatex paper.tex && xelatex paper.tex
 
 ---
 
-## 八、已知问题与后续计划
+## 八、局限与后续计划
 
 项目在方法上尽力保持严谨，但仍有以下明确的局限与待办事项：
 
 - **面板结构未被利用**：数据虽为 2023–2026 年面板，本文仅做混合截面分析，未使用企业固定效应控制不随时间变化的不可观测异质性。后续可拓展为固定效应 DML。
 - **全面采纳样本严重不足**：`full` 阶段仅 1,685 家（1.1%），导致"仅全面采纳"设定的推断精度很低（SE = 0.026）、多值处理中该组标准误高达 0.175。
 - **效应滞后性无法识别**：AI 的生产率回报可能需要数年才显现，截面设定无法刻画动态效应。
-- **异质性脚本存在版本差异**：当前 [`scripts/06_heterogeneity_analysis.py`](scripts/06_heterogeneity_analysis.py) 输出因果森林 CATE 结果；论文表 3（多值处理）与表 4（子组 HTE）由该脚本的早期版本产出，其代码保存在论文附录 A 中，尚未合并回 `scripts/`。
-- **图表编号重复**：`fig8_cate_distribution.pdf` 与 `fig8_hte_forest.pdf` 共用序号 8，待统一重编号。
-- **论文正文的子组数量表述有误**：论文正文写"19 个子组"，而 `output/tables/hte_results.csv` 实际输出 **18 个**子组（9 行业 + 3 规模 + 4 年份 + 2 自动化分组），待校订。
+- **论文附录为节选**：附录 A 收录初始提示词、各脚本对应的提示词与首版实现代码，并非仓库中最终代码的完整副本；以 `scripts/` 为准。
 
 ---
 
@@ -359,9 +353,9 @@ cd report && xelatex paper.tex && xelatex paper.tex
 
 ## 十、致谢与 AI 使用声明
 
-本项目的**研究问题、变量设定（D、Y、X 的构造方式）、方法选择（部分线性模型 + 交叉拟合 + 因果森林）、稳健性检验方案与全部结果解读**均由作者本人设计完成；**代码实现、调试与文档整理**环节使用了 AI 编程助手（Claude Code / DeepSeek Harness）辅助。为便于审查，论文附录 A 保留了项目初始提示词、各脚本对应的提示词与实现代码（其中异质性部分对应早期版本，参见第八节），`logs/analysis_log.md` 亦逐条记录了每次运行的数值输出与当时的判断依据。
+本项目的**研究问题、变量设定（D、Y、X 的构造方式）、方法选择（部分线性模型 + 交叉拟合 + 因果森林）、稳健性检验方案与全部结果解读**均由作者本人设计完成；**代码实现、调试与文档整理**环节使用了 AI 编程助手（Claude Code / DeepSeek Harness）辅助。为便于审查，论文附录 A 保留了项目初始提示词与各脚本对应的提示词，`logs/analysis_log.md` 亦逐条记录了每次运行的数值输出与当时的判断依据。
 
-本仓库目前未附加开源许可证，论文与代码的著作权归作者所有；如需引用或复用，欢迎通过 Issue 联系。
+**许可证**：本仓库代码（`scripts/`、`output/`、`logs/`、本文档）采用 [MIT 许可证](LICENSE)；论文（`report/`）采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。原始数据不随仓库分发，使用请遵循 [Kaggle 数据集](https://www.kaggle.com/datasets/mohankrishnathalla/global-ai-adoption-and-workforce-impact-dataset)的原始条款。引用请见第九节。
 
 ---
 
