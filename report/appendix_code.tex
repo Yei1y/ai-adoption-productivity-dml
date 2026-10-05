@@ -1,7 +1,7 @@
 % ============================================================
 % 附录：Python 代码
 % ============================================================
-\section{代码附录}\label{sec:appendix}
+\section{代码与提示词附录（节选）}\label{sec:appendix}
 
 \subsection{初始对话提示词}
 
@@ -479,7 +479,9 @@ sens_df.to_csv(os.path.join(OUTPUT_TABLES, "sensitivity_analysis.csv"), index=Fa
 用 EconML 的 CausalForestDML 做异质性分析。跟基准回归用同样的协变量和 RF nuisance 模型设定。估计个体 CATE，输出 CATE 分布密度图（标注 ATE、10/90 分位数、正负尾部占比）和特征重要性排名图（one-hot dummy 的重要性归并回原始变量）。然后再切分子组跑一遍传统 HTE 做对照——按行业、规模、年份、自动化率中位数分组分别估计 ATE，画森林图。子组样本量太小的时候自动跳过。
 \end{quote}
 
-\subsection{异质性分析 (\texttt{06\_heterogeneity\_analysis.py})}
+\subsection{子组异质性分析 (\texttt{06b\_subgroup\_hte.py})}
+
+异质性分析现拆分为两个脚本：\texttt{06\_heterogeneity\_analysis.py} 负责因果森林 CATE 估计，\texttt{06b\_subgroup\_hte.py} 负责本节展示的多值处理效应与子组 HTE。以下为该分析的首版实现，仓库中的最终版本在其基础上增加了确定性行序与样本量守卫，估计逻辑一致。
 
 \begin{lstlisting}[language=Python]
 import pandas as pd, numpy as np, os, warnings
@@ -586,6 +588,6 @@ if len(plot_df) > 0:
     ax.set_yticklabels(plot_df["label"], fontsize=9)
     ax.set_xlabel("ATE (95% CI)"); ax.set_title("Heterogeneous Treatment Effects")
     plt.tight_layout()
-    fig.savefig(os.path.join(OUTPUT_FIGURES, "fig8_hte_forest.pdf"), bbox_inches="tight")
+    fig.savefig(os.path.join(OUTPUT_FIGURES, "fig10_hte_forest.pdf"), bbox_inches="tight")
     plt.close()
 \end{lstlisting}
