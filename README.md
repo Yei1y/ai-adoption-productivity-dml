@@ -116,7 +116,7 @@ $$
 DML 的核心是对部分线性模型构造 **Neyman 正交**评分函数：
 
 $$
-\psi(W;\theta,\eta) = \bigl(Y - \ell(X) - \theta\,(D - m(X))\bigr)\bigl(D - m(X)\bigr),
+\psi(W;\theta,\eta) = \left(Y - \ell(X) - \theta\,(D - m(X))\right)\left(D - m(X)\right),
 \qquad \ell(X)=\mathbb{E}[Y\mid X],\ m(X)=\mathbb{E}[D\mid X]
 $$
 
